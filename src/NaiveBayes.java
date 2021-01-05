@@ -4,16 +4,26 @@ import java.math.BigDecimal;
 import java.util.*;
 
 public class NaiveBayes {
-    private static final double INIT_GUESS=0.5;
-    Table allWords=new Table();
-    Table posWords=new Table();
-    Table negWords=new Table();
-    int posWordCount=0;
-    int negWordCount=0;
-    int goodMovies=0;
-    int badMovies=0;
+    private Table allWords=new Table();
+    private Table posWords=new Table();
+    private Table negWords=new Table();
+    private int posWordCount=0;
+    private int negWordCount=0;
+    private int goodMovies;
+    private int badMovies;
+    private int trainSize;
+    private int wordsToSkip;
+    private int wordsToCheck;
+    private double prob;
+    private double smoothingFactor;
 
-    public NaiveBayes() {
+
+    public NaiveBayes(double smoothingFactor,int wordsToCheck,int wordsToSkip,int trainSize) {
+        this.smoothingFactor=smoothingFactor;
+        this.wordsToCheck=wordsToCheck;
+        this.wordsToSkip=wordsToSkip;
+        this.trainSize=trainSize;
+
     }
 
     public void train() {
@@ -25,13 +35,11 @@ public class NaiveBayes {
         Scanner scan;
         String str;
         int i=0;
-        int j=0;
 
-        for (File file : posDir) {
+
+        for (int h=0;h<trainSize;h++) {
             try {
-
-  //              System.out.println(file.getAbsolutePath());
-                scan = new Scanner(file);
+                scan = new Scanner(posDir[h]);
                 do {
                     str = scan.next();
                     str=str.toLowerCase();
@@ -65,10 +73,7 @@ public class NaiveBayes {
                             if(str!="-"){
                                 posWords.add(str);
                                 posWordCount++;
-                                if(!negWords.words.containsKey(str)){
-                                    negWords.add(str);
-                                    negWordCount++;
-                                }
+
                             }
                         }
 
@@ -92,11 +97,9 @@ public class NaiveBayes {
 
        }
 
-        for (File file : negDir) {
+        for (int g=0;g<trainSize;g++) {
             try {
-
-                //              System.out.println(file.getAbsolutePath());
-                scan = new Scanner(file);
+                scan = new Scanner(negDir[g]);
                 do {
                     str = scan.next();
                     str=str.toLowerCase();
@@ -130,10 +133,7 @@ public class NaiveBayes {
                             if(str!="-"){
                                 negWords.add(str);
                                 negWordCount++;
-                                if(!posWords.words.containsKey(str)){
-                                    posWords.add(str);
-                                    posWordCount++;
-                                }
+
                             }
                         }
 
@@ -158,27 +158,36 @@ public class NaiveBayes {
         }
 
 
-        Map<String, Integer> hm1 =sortByValue(posWords.words);
-        Map<String, Integer> hm2 =sortByValue(negWords.words);
+
+        posWords.setMap(posWords.sortByValue(posWords.getMap()));
+        negWords.setMap(negWords.sortByValue(negWords.getMap()));
+        posWords.cutWords(wordsToSkip,wordsToCheck);
+        negWords.cutWords(wordsToSkip,wordsToCheck);
+        System.out.println();
+        System.out.println("Training complete");
+
 
 
 
     }
 
-    public void evaluate(){
+    public void evaluateTrainPos(){
         int i=0;
-        File pos = new File("C:\\Users\\taso\\Desktop\\NaiveBayesClassifier\\assets\\test\\pos");
+        File pos = new File("C:\\Users\\taso\\Desktop\\NaiveBayesClassifier\\assets\\train\\pos");
         File[] posDir = pos.listFiles();
         Scanner scan;
         String str;
-        BigDecimal good=BigDecimal.valueOf(1);
-        BigDecimal bad=BigDecimal.valueOf(1);
+        badMovies=0;
+        goodMovies=0;
 
-        for(File file:posDir){
+
+        for(int h=0;h<trainSize;h++){
             ArrayList <Double> probabilitiesGood=new ArrayList<Double>();
             ArrayList <Double> probabilitiesBad=new ArrayList<Double>();
+            BigDecimal good=BigDecimal.valueOf(1);
+            BigDecimal bad=BigDecimal.valueOf(1);
             try {
-                scan=new Scanner(file);
+                scan=new Scanner(posDir[h]);
                 do{
                     str=scan.next();
                     str=str.toLowerCase();
@@ -204,38 +213,24 @@ public class NaiveBayes {
                     if(str.endsWith("-")){
                         str = str.replace("-", "");
                     }
-                    Double prob=(double)posWords.getCount(str)/posWordCount;
-                    if(prob!=0.0){
-                    probabilitiesGood.add(prob);}
-                    else{
-                        probabilitiesGood.add(0.0002);
-                    }
-
-                    prob=(double)negWords.getCount(str)/negWordCount;
-                    if(prob!=0.0){
-                        probabilitiesBad.add(prob);}
-                    else{
-                        probabilitiesBad.add(0.0002);
-                    }
+                    prob=(double)(posWords.getCount(str)+smoothingFactor)/(trainSize+smoothingFactor*posWords.getSize());
+                    good=good.multiply(BigDecimal.valueOf(prob));
+                    prob=(double)(negWords.getCount(str)+smoothingFactor)/(trainSize+smoothingFactor*negWords.getSize());
+                    bad=bad.multiply(BigDecimal.valueOf(prob));
 
 
 
 
 
                 }while(scan.hasNext());
-                for(Double d:probabilitiesGood){
-                    good=good.multiply(BigDecimal.valueOf(d));
-                }
-                for(Double d:probabilitiesBad){
-                    bad=bad.multiply(BigDecimal.valueOf(d));
-                }
 
-               // System.out.println(good+" "+bad);
+
+                // System.out.println(good+" "+bad);
                 if(good.compareTo(bad)==1){
-                   // System.out.println("good movie");
+                    // System.out.println("good movie");
                     goodMovies++;
                 }else if(good.compareTo(bad)==-1){
-                  //  System.out.println("bad movie");
+                    //  System.out.println("bad movie");
                     badMovies++;
                 }
 
@@ -254,21 +249,119 @@ public class NaiveBayes {
 
 
         }
+        System.out.println();
+        System.out.println("Evaluation of positive review train dataset");
+        System.out.println("good reviews:"+goodMovies);
+        System.out.println("bad reviews:"+badMovies);
+        double accuracy=((double)goodMovies/(double)trainSize)*100;
+        System.out.println(accuracy+"% accuracy");
 
-        System.out.println("good movies:"+goodMovies);
-        System.out.println("bad movies:"+badMovies);
+
 
 
 
 
     }
 
-    public void evaluate2(){
+    public void evaluateTrainNeg(){
         int i=0;
-        File pos = new File("C:\\Users\\taso\\Desktop\\NaiveBayesClassifier\\assets\\test\\neg");
+        File pos = new File("C:\\Users\\taso\\Desktop\\NaiveBayesClassifier\\assets\\train\\neg");
         File[] posDir = pos.listFiles();
         Scanner scan;
         String str;
+        badMovies=0;
+        goodMovies=0;
+
+
+        for(int h=0;h<trainSize;h++){
+            ArrayList <Double> probabilitiesGood=new ArrayList<Double>();
+            ArrayList <Double> probabilitiesBad=new ArrayList<Double>();
+            BigDecimal good=BigDecimal.valueOf(1);
+            BigDecimal bad=BigDecimal.valueOf(1);
+            try {
+                scan=new Scanner(posDir[h]);
+                do{
+                    str=scan.next();
+                    str=str.toLowerCase();
+                    str = str.replace(".", "");
+                    str = str.replace("\"", "");
+                    str = str.replace(",", "");
+                    str = str.replace("!", "");
+                    str = str.replace("(", "");
+                    str = str.replace(")", "");
+                    str = str.replace(";", "");
+                    str = str.replace(":", "");
+                    str = str.replace("<", "");
+                    str = str.replace(">", "");
+                    str = str.replace("?", "");
+                    str = str.replace("%", "");
+                    str = str.replace("/", "");
+                    str = str.replace("&", "");
+                    str = str.replace(" ", "");
+                    str = str.replace("+", "");
+                    str = str.replace("#", "");
+                    str = str.replace("*", "");
+                    str = str.replace("'", "");
+                    if(str.endsWith("-")){
+                        str = str.replace("-", "");
+                    }
+                    prob=(double)(posWords.getCount(str)+smoothingFactor)/(trainSize+smoothingFactor*posWords.getSize());
+                    good=good.multiply(BigDecimal.valueOf(prob));
+                    prob=(double)(negWords.getCount(str)+smoothingFactor)/(trainSize+smoothingFactor* negWords.getSize());
+                    bad=bad.multiply(BigDecimal.valueOf(prob));
+
+
+
+
+
+                }while(scan.hasNext());
+
+
+                // System.out.println(good+" "+bad);
+                if(good.compareTo(bad)==1){
+                    // System.out.println("good movie");
+                    goodMovies++;
+                }else if(good.compareTo(bad)==-1){
+                    //  System.out.println("bad movie");
+                    badMovies++;
+                }
+
+
+
+
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+
+            if(i==1000){
+                System.out.print("#");
+                i=-1;
+            }
+            i++;
+
+
+        }
+        System.out.println();
+        System.out.println("Evaluation of negative review train dataset");
+        System.out.println("good reviews:"+goodMovies);
+        System.out.println("bad reviews:"+badMovies);
+        double accuracy=((double)badMovies/(double)trainSize)*100;
+        System.out.println(accuracy+"% accuracy");
+
+
+
+
+    }
+
+
+    public void evaluateTestPos(){
+        int i=0;
+        File pos = new File("C:\\Users\\taso\\Desktop\\NaiveBayesClassifier\\assets\\test\\pos");
+        File[] posDir = pos.listFiles();
+        Scanner scan;
+        String str;
+        badMovies=0;
+        goodMovies=0;
 
 
         for(File file:posDir){
@@ -303,21 +396,11 @@ public class NaiveBayes {
                     if(str.endsWith("-")){
                         str = str.replace("-", "");
                     }
-                    Double prob=(double)posWords.getCount(str)/posWordCount;
-                    if(prob!=0.0){
-                        good=good.multiply(BigDecimal.valueOf(prob));
-                    }
-                    else{
-                        good=good.multiply(BigDecimal.valueOf(0.0002));
-                    }
+                    prob=(double)(posWords.getCount(str)+smoothingFactor)/(trainSize+smoothingFactor*posWords.getSize());
+                    good=good.multiply(BigDecimal.valueOf(prob));
+                    prob=(double)(negWords.getCount(str)+smoothingFactor)/(trainSize+smoothingFactor*negWords.getSize());
+                    bad=bad.multiply(BigDecimal.valueOf(prob));
 
-                    prob=(double)negWords.getCount(str)/negWordCount;
-                    if(prob!=0.0){
-                        bad=bad.multiply(BigDecimal.valueOf(prob));
-                    }
-                    else{
-                        bad=bad.multiply(BigDecimal.valueOf(0.0002));
-                    }
 
 
 
@@ -349,50 +432,129 @@ public class NaiveBayes {
 
 
         }
+        System.out.println();
+        System.out.println("Evaluation of positive review test dataset");
+        System.out.println("good reviews:"+goodMovies);
+        System.out.println("bad reviews:"+badMovies);
+        double accuracy=((double)goodMovies/(double)12500)*100;
+        System.out.println(accuracy+"% accuracy");
 
-        System.out.println("good movies:"+goodMovies);
-        System.out.println("bad movies:"+badMovies);
 
 
 
 
     }
 
+    public void evaluateTestNeg(){
+        int i=0;
+        File pos = new File("C:\\Users\\taso\\Desktop\\NaiveBayesClassifier\\assets\\test\\neg");
+        File[] posDir = pos.listFiles();
+        Scanner scan;
+        String str;
+        badMovies=0;
+        goodMovies=0;
+
+
+        for(File file:posDir){
+            ArrayList <Double> probabilitiesGood=new ArrayList<Double>();
+            ArrayList <Double> probabilitiesBad=new ArrayList<Double>();
+            BigDecimal good=BigDecimal.valueOf(1);
+            BigDecimal bad=BigDecimal.valueOf(1);
+            try {
+                scan=new Scanner(file);
+                do{
+                    str=scan.next();
+                    str=str.toLowerCase();
+                    str = str.replace(".", "");
+                    str = str.replace("\"", "");
+                    str = str.replace(",", "");
+                    str = str.replace("!", "");
+                    str = str.replace("(", "");
+                    str = str.replace(")", "");
+                    str = str.replace(";", "");
+                    str = str.replace(":", "");
+                    str = str.replace("<", "");
+                    str = str.replace(">", "");
+                    str = str.replace("?", "");
+                    str = str.replace("%", "");
+                    str = str.replace("/", "");
+                    str = str.replace("&", "");
+                    str = str.replace(" ", "");
+                    str = str.replace("+", "");
+                    str = str.replace("#", "");
+                    str = str.replace("*", "");
+                    str = str.replace("'", "");
+                    if(str.endsWith("-")){
+                        str = str.replace("-", "");
+                    }
+                    prob=(double)(posWords.getCount(str)+smoothingFactor)/(trainSize+smoothingFactor*posWords.getSize());
+                        good=good.multiply(BigDecimal.valueOf(prob));
+                    prob=(double)(negWords.getCount(str)+smoothingFactor)/(trainSize+smoothingFactor* negWords.getSize());
+                        bad=bad.multiply(BigDecimal.valueOf(prob));
 
 
 
 
-    public static HashMap<String, Integer> sortByValue(HashMap<String, Integer> hm)
-    {
-        // Create a list from elements of HashMap
-        List<Map.Entry<String, Integer> > list =
-                new LinkedList<Map.Entry<String, Integer> >(hm.entrySet());
 
-        // Sort the list
-        Collections.sort(list, new Comparator<Map.Entry<String, Integer> >() {
-            public int compare(Map.Entry<String, Integer> o1,
-                               Map.Entry<String, Integer> o2)
-            {
-                return (o2.getValue()).compareTo(o1.getValue());
+                }while(scan.hasNext());
+
+
+                // System.out.println(good+" "+bad);
+                if(good.compareTo(bad)==1){
+                    // System.out.println("good movie");
+                    goodMovies++;
+                }else if(good.compareTo(bad)==-1){
+                    //  System.out.println("bad movie");
+                    badMovies++;
+                }
+
+
+
+
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
             }
-        });
 
-        // put data from sorted list to hashmap
-        HashMap<String, Integer> temp = new LinkedHashMap<String, Integer>();
-        for (Map.Entry<String, Integer> aa : list) {
-            temp.put(aa.getKey(), aa.getValue());
+            if(i==1000){
+                System.out.print("#");
+                i=-1;
+            }
+            i++;
+
+
         }
-        return temp;
+        System.out.println();
+        System.out.println("Evaluation of negative review test dataset");
+        System.out.println("good reviews:"+goodMovies);
+        System.out.println("bad reviews:"+badMovies);
+        double accuracy=((double)badMovies/(double)12500)*100;
+        System.out.println(accuracy+"% accuracy");
+
+
+
+
     }
+
+
+
+
+
+
+
+
 
 
 
 
     public static void main(String [] args){
 
-        NaiveBayes a=new NaiveBayes();
+        NaiveBayes a=new NaiveBayes(0.02,70000,5,12500);
         a.train();
-        a.evaluate2();
+        a.evaluateTrainPos();
+        a.evaluateTrainNeg();
+        a.evaluateTestPos();
+        a.evaluateTestNeg();
+
    }
 
 
